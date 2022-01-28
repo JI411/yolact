@@ -71,12 +71,14 @@ class Config(object):
         for key, val in config_dict.items():
             self.__setattr__(key, val)
 
-    def copy(self, new_config_dict={}):
+    def copy(self, new_config_dict=None):
         """
         Copies this config into a new config object, making
         the changes given by new_config_dict.
         """
 
+        if new_config_dict is None:
+            new_config_dict = {}
         ret = Config(vars(self))
         
         for key, val in new_config_dict.items():
