@@ -306,7 +306,10 @@ class RandomSampleCrop(object):
         height, width, _ = image.shape
         while True:
             # randomly choose a mode
-            mode = random.choice(self.sample_options)
+            # mode = random.choice(self.sample_options)
+            # https://github.com/amdegroot/ssd.pytorch/issues/498#issuecomment-766871222
+            random_idx = random.randint(0, len(self.sample_options) - 1)
+            mode = self.sample_options[random_idx]
             if mode is None:
                 return image, masks, boxes, labels
 
