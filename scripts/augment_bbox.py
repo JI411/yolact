@@ -16,9 +16,7 @@ dump_file = 'weights/bboxes_aug.pkl'
 box_file = 'weights/bboxes.pkl'
 
 def augment_boxes(bboxes):
-	bboxes_rel = []
-	for box in bboxes:
-		bboxes_rel.append(prep_box(box))
+	bboxes_rel = [prep_box(box) for box in bboxes]
 	bboxes_rel = np.concatenate(bboxes_rel, axis=0)
 
 	with open(dump_file, 'wb') as f:

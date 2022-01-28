@@ -61,10 +61,7 @@ def jaccard(box_a, box_b, iscrowd=False):
               (box_b[:, 3]-box_b[:, 1])).unsqueeze(0).expand_as(inter)  # [A,B]
     union = area_a + area_b - inter
 
-    if iscrowd:
-        return inter / area_a
-    else:
-        return inter / union  # [A,B]
+    return inter / area_a if iscrowd else inter / union
 
 # Also convert to point form
 def to_relative(bboxes):

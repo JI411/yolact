@@ -66,20 +66,20 @@ class COCODetection(data.Dataset):
                  dataset_name='MS COCO', has_gt=True):
         # Do this here because we have too many things named COCO
         from pycocotools.coco import COCO
-        
+
         if target_transform is None:
             target_transform = COCOAnnotationTransform()
 
         self.root = image_path
         self.coco = COCO(info_file)
-        
+
         self.ids = list(self.coco.imgToAnns.keys())
-        if len(self.ids) == 0 or not has_gt:
+        if not self.ids or not has_gt:
             self.ids = list(self.coco.imgs.keys())
-        
+
         self.transform = transform
         self.target_transform = COCOAnnotationTransform()
-        
+
         self.name = dataset_name
         self.has_gt = has_gt
 
@@ -120,7 +120,7 @@ class COCODetection(data.Dataset):
         # objects of said class, where there is no annotation for each individual object. Both
         # during testing and training, consider these crowds as neutral.
         crowd  = [x for x in target if     ('iscrowd' in x and x['iscrowd'])]
-        target = [x for x in target if not ('iscrowd' in x and x['iscrowd'])]
+        target = [x for x in target if 'iscrowd' not in x or not x['iscrowd']]
         num_crowds = len(crowd)
 
         for x in crowd:
@@ -128,28 +128,28 @@ class COCODetection(data.Dataset):
 
         # This is so we ensure that all crowd annotations are at the end of the array
         target += crowd
-        
+
         # The split here is to have compatibility with both COCO2014 and 2017 annotations.
         # In 2014, images have the pattern COCO_{train/val}2014_%012d.jpg, while in 2017 it's %012d.jpg.
         # Our script downloads the images as %012d.jpg so convert accordingly.
         file_name = self.coco.loadImgs(img_id)[0]['file_name']
-        
+
         if file_name.startswith('COCO'):
             file_name = file_name.split('_')[-1]
 
         path = osp.join(self.root, file_name)
         assert osp.exists(path), 'Image path does not exist: {}'.format(path)
-        
+
         img = cv2.imread(path)
         height, width, _ = img.shape
-        
-        if len(target) > 0:
+
+        if target:
             # Pool all the masks for this image into one [num_objects,height,width] matrix
             masks = [self.coco.annToMask(obj).reshape(-1) for obj in target]
             masks = np.vstack(masks)
             masks = masks.reshape(-1, height, width)
 
-        if self.target_transform is not None and len(target) > 0:
+        if self.target_transform is not None and target:
             target = self.target_transform(target, width, height)
 
         if self.transform is not None:
@@ -157,11 +157,11 @@ class COCODetection(data.Dataset):
                 target = np.array(target)
                 img, masks, boxes, labels = self.transform(img, masks, target[:, :4],
                     {'num_crowds': num_crowds, 'labels': target[:, 4]})
-            
+
                 # I stored num_crowds in labels so I didn't have to modify the entirety of augmentations
                 num_crowds = labels['num_crowds']
                 labels     = labels['labels']
-                
+
                 target = np.hstack((boxes, np.expand_dims(labels, axis=1)))
             else:
                 img, _, _, _ = self.transform(img, np.zeros((1, height, width), dtype=np.float), np.array([[0, 0, 1, 1]]),
