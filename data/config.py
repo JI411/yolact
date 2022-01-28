@@ -682,7 +682,7 @@ yolact_base_config = coco_base_config.copy({
     'max_iter': 800000,
     
     # Backbone Settings
-    'backbone': resnet101_backbone.copy({
+    'backbone': resnet50_backbone.copy({
         'selected_layers': list(range(1, 4)),
         'use_pixel_scales': True,
         'preapply_sqrt': False,
