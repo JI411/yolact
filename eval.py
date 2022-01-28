@@ -170,18 +170,17 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
     def get_color(j, on_gpu=None):
         global color_cache
         color_idx = (classes[j] * 5 if class_color else j * 5) % len(COLORS)
-        
+
         if on_gpu is not None and color_idx in color_cache[on_gpu]:
             return color_cache[on_gpu][color_idx]
-        else:
-            color = COLORS[color_idx]
-            if not undo_transform:
-                # The image might come in as RGB or BRG, depending
-                color = (color[2], color[1], color[0])
-            if on_gpu is not None:
-                color = torch.Tensor(color).to(on_gpu).float() / 255.
-                color_cache[on_gpu][color_idx] = color
-            return color
+        color = COLORS[color_idx]
+        if not undo_transform:
+            # The image might come in as RGB or BRG, depending
+            color = (color[2], color[1], color[0])
+        if on_gpu is not None:
+            color = torch.Tensor(color).to(on_gpu).float() / 255.
+            color_cache[on_gpu][color_idx] = color
+        return color
 
     # First, draw the masks on the GPU where we can do it really fast
     # Beware: very fast but possibly unintelligible mask-drawing code ahead
@@ -345,17 +344,16 @@ class Detections:
                         'use_yolo_regressors', 'use_prediction_matching',
                         'train_masks']
 
-        output = {
-            'info' : {
-                'Config': {key: getattr(cfg, key) for key in config_outs},
-            }
-        }
-
-        image_ids = list(set([x['image_id'] for x in self.bbox_data]))
+        image_ids = list({x['image_id'] for x in self.bbox_data})
         image_ids.sort()
         image_lookup = {_id: idx for idx, _id in enumerate(image_ids)}
 
-        output['images'] = [{'image_id': image_id, 'dets': []} for image_id in image_ids]
+        output = {
+            'info': {'Config': {key: getattr(cfg, key) for key in config_outs}},
+            'images': [
+                {'image_id': image_id, 'dets': []} for image_id in image_ids
+            ],
+        }
 
         # These should already be sorted by score with the way prep_metrics works.
         for bbox, mask in zip(self.bbox_data, self.mask_data):
@@ -427,7 +425,7 @@ def prep_metrics(ap_data, dets, img, gt, gt_masks, h, w, num_crowd, image_id, de
                     detections.add_bbox(image_id, classes[i], boxes[i,:],   box_scores[i])
                     detections.add_mask(image_id, classes[i], masks[i,:,:], mask_scores[i])
             return
-    
+
     with timer.env('Eval Setup'):
         num_pred = len(classes)
         num_gt   = len(gt_classes)
@@ -455,35 +453,35 @@ def prep_metrics(ap_data, dets, img, gt, gt_masks, h, w, num_crowd, image_id, de
         ]
 
     timer.start('Main loop')
+    ap_per_iou = []
     for _class in set(classes + gt_classes):
-        ap_per_iou = []
-        num_gt_for_class = sum([1 for x in gt_classes if x == _class])
-        
+        num_gt_for_class = sum(x == _class for x in gt_classes)
+
         for iouIdx in range(len(iou_thresholds)):
             iou_threshold = iou_thresholds[iouIdx]
 
             for iou_type, iou_func, crowd_func, score_func, indices in iou_types:
                 gt_used = [False] * len(gt_classes)
-                
+
                 ap_obj = ap_data[iou_type][iouIdx][_class]
                 ap_obj.add_gt_positives(num_gt_for_class)
 
                 for i in indices:
                     if classes[i] != _class:
                         continue
-                    
+
                     max_iou_found = iou_threshold
                     max_match_idx = -1
                     for j in range(num_gt):
                         if gt_used[j] or gt_classes[j] != _class:
                             continue
-                            
+
                         iou = iou_func(i, j)
 
                         if iou > max_iou_found:
                             max_iou_found = iou
                             max_match_idx = j
-                    
+
                     if max_match_idx >= 0:
                         gt_used[max_match_idx] = True
                         ap_obj.push(score_func(i), True)
@@ -495,7 +493,7 @@ def prep_metrics(ap_data, dets, img, gt, gt_masks, h, w, num_crowd, image_id, de
                             for j in range(len(crowd_classes)):
                                 if crowd_classes[j] != _class:
                                     continue
-                                
+
                                 iou = crowd_func(i, j)
 
                                 if iou > iou_threshold:
@@ -598,11 +596,10 @@ def evalimage(net:Yolact, path:str, save_path:str=None):
     preds = net(batch)
 
     img_numpy = prep_display(preds, frame, None, None, undo_transform=False)
-    
+
     if save_path is None:
         img_numpy = img_numpy[:, :, (2, 1, 0)]
 
-    if save_path is None:
         plt.imshow(img_numpy)
         plt.title(path)
         plt.show()
@@ -682,7 +679,7 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
 
     def get_next_frame(vid):
         frames = []
-        for idx in range(args.video_multiframe):
+        for _ in range(args.video_multiframe):
             frame = vid.read()[1]
             if frame is None:
                 return frames
@@ -751,7 +748,7 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
                         print('\rProcessing Frames  %s %6d / %6d (%5.2f%%)    %5.2f fps        '
                             % (repr(progress_bar), frames_displayed, num_frames, progress, fps), end='')
 
-                
+
                 # This is split because you don't want savevideo to require cv2 display functionality (see #197)
                 if out_path is None and cv2.waitKey(1) == 27:
                     # Press Escape to close
@@ -765,16 +762,14 @@ def evalvideo(net:Yolact, path:str, out_path:str=None):
                         frame_time_stabilizer += stabilizer_step
                     elif buffer_size > args.video_multiframe:
                         frame_time_stabilizer -= stabilizer_step
-                        if frame_time_stabilizer < 0:
-                            frame_time_stabilizer = 0
-
+                        frame_time_stabilizer = max(frame_time_stabilizer, 0)
                     new_target = frame_time_stabilizer if is_webcam else max(frame_time_stabilizer, frame_time_target)
                 else:
                     new_target = frame_time_target
 
                 next_frame_target = max(2 * new_target - video_frame_times.get_avg(), 0)
                 target_time = frame_time_start + next_frame_target - 0.001 # Let's just subtract a millisecond to be safe
-                
+
                 if out_path is None or args.emulate_playback:
                     # This gives more accurate timing than if sleeping the whole amount at once
                     while time.time() < target_time:
