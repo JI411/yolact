@@ -128,6 +128,20 @@ dataset_base = Config({
     'label_map': None
 })
 
+coal_dataset = dataset_base.copy({
+    'name': 'Coal fraction detection dataset',
+          
+    'train_images': '/content/few_data',
+    'train_info': '/content/few_data_coco.json',
+
+    'valid_images': '/content/few_data',
+    'valid_info': '/content/few_data_coco.json',
+          
+    'class_names': ('coal',),
+
+    'label_map': {1: 1}
+})
+
 coco2014_dataset = dataset_base.copy({
     'name': 'COCO 2014',
     
