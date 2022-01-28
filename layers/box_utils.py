@@ -245,7 +245,7 @@ def encode(matched, priors, use_yolo_regressors:bool=False):
         # In fact encode(decode(x, p), p) should be x
         boxes = center_size(matched)
 
-        loc = torch.cat((
+        return torch.cat((
             boxes[:, :2] - priors[:, :2],
             torch.log(boxes[:, 2:] / priors[:, 2:])
         ), 1)
@@ -260,9 +260,7 @@ def encode(matched, priors, use_yolo_regressors:bool=False):
         g_wh = (matched[:, 2:] - matched[:, :2]) / priors[:, 2:]
         g_wh = torch.log(g_wh) / variances[1]
         # return target for smooth_l1_loss
-        loc = torch.cat([g_cxcy, g_wh], 1)  # [num_priors,4]
-        
-    return loc
+        return torch.cat([g_cxcy, g_wh], 1)
 
 @torch.jit.script
 def decode(loc, priors, use_yolo_regressors:bool=False):

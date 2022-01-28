@@ -99,7 +99,7 @@ if args.autoscale and args.batch_size != 8:
 
 # Update training parameters from the config if necessary
 def replace(name):
-    if getattr(args, name) == None: setattr(args, name, getattr(cfg, name))
+    if getattr(args, name) is None: setattr(args, name, getattr(cfg, name))
 replace('lr')
 replace('decay')
 replace('gamma')
@@ -143,8 +143,7 @@ class NetLoss(nn.Module):
     
     def forward(self, images, targets, masks, num_crowds):
         preds = self.net(images)
-        losses = self.criterion(self.net, preds, targets, masks, num_crowds)
-        return losses
+        return self.criterion(self.net, preds, targets, masks, num_crowds)
 
 class CustomDataParallel(nn.DataParallel):
     """
@@ -162,12 +161,10 @@ class CustomDataParallel(nn.DataParallel):
             [kwargs] * len(devices)
 
     def gather(self, outputs, output_device):
-        out = {}
-
-        for k in outputs[0]:
-            out[k] = torch.stack([output[k].to(output_device) for output in outputs])
-        
-        return out
+        return {
+            k: torch.stack([output[k].to(output_device) for output in outputs])
+            for k in outputs[0]
+        }
 
 def train():
     if not os.path.exists(args.save_folder):

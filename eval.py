@@ -170,18 +170,17 @@ def prep_display(dets_out, img, h, w, undo_transform=True, class_color=False, ma
     def get_color(j, on_gpu=None):
         global color_cache
         color_idx = (classes[j] * 5 if class_color else j * 5) % len(COLORS)
-        
+
         if on_gpu is not None and color_idx in color_cache[on_gpu]:
             return color_cache[on_gpu][color_idx]
-        else:
-            color = COLORS[color_idx]
-            if not undo_transform:
-                # The image might come in as RGB or BRG, depending
-                color = (color[2], color[1], color[0])
-            if on_gpu is not None:
-                color = torch.Tensor(color).to(on_gpu).float() / 255.
-                color_cache[on_gpu][color_idx] = color
-            return color
+        color = COLORS[color_idx]
+        if not undo_transform:
+            # The image might come in as RGB or BRG, depending
+            color = (color[2], color[1], color[0])
+        if on_gpu is not None:
+            color = torch.Tensor(color).to(on_gpu).float() / 255.
+            color_cache[on_gpu][color_idx] = color
+        return color
 
     # First, draw the masks on the GPU where we can do it really fast
     # Beware: very fast but possibly unintelligible mask-drawing code ahead
@@ -345,17 +344,16 @@ class Detections:
                         'use_yolo_regressors', 'use_prediction_matching',
                         'train_masks']
 
-        output = {
-            'info' : {
-                'Config': {key: getattr(cfg, key) for key in config_outs},
-            }
-        }
-
-        image_ids = list(set([x['image_id'] for x in self.bbox_data]))
+        image_ids = list({x['image_id'] for x in self.bbox_data})
         image_ids.sort()
         image_lookup = {_id: idx for idx, _id in enumerate(image_ids)}
 
-        output['images'] = [{'image_id': image_id, 'dets': []} for image_id in image_ids]
+        output = {
+            'info': {'Config': {key: getattr(cfg, key) for key in config_outs}},
+            'images': [
+                {'image_id': image_id, 'dets': []} for image_id in image_ids
+            ],
+        }
 
         # These should already be sorted by score with the way prep_metrics works.
         for bbox, mask in zip(self.bbox_data, self.mask_data):

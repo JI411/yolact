@@ -75,11 +75,10 @@ def stop(fn_name=None, use_stack=True):
 				_running_timer = None
 		else:
 			print('Warning: timer stopped with no timer running!')
+	elif _start_times[fn_name] > -1:
+		_total_times[fn_name] += time.perf_counter() - _start_times[fn_name]
 	else:
-		if _start_times[fn_name] > -1:
-			_total_times[fn_name] += time.perf_counter() - _start_times[fn_name]
-		else:
-			print('Warning: timer for %s stopped before starting!' % fn_name)
+		print('Warning: timer for %s stopped before starting!' % fn_name)
 
 
 def print_stats():
@@ -108,7 +107,8 @@ def print_stats():
 
 def total_time():
 	""" Returns the total amount accumulated across all functions in seconds. """ 
-	return sum([elapsed_time for name, elapsed_time in _total_times.items() if name not in _disabled_names])
+	return sum(elapsed_time for name, elapsed_time in _total_times.items()
+	           if name not in _disabled_names)
 
 
 class env():

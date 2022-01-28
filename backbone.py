@@ -101,7 +101,7 @@ class ResNetBackbone(nn.Module):
             if len(self.layers) in self.atrous_layers:
                 self.dilation += 1
                 stride = 1
-            
+
             downsample = nn.Sequential(
                 nn.Conv2d(self.inplanes, planes * block.expansion,
                           kernel_size=1, stride=stride, bias=False,
@@ -109,9 +109,19 @@ class ResNetBackbone(nn.Module):
                 self.norm_layer(planes * block.expansion),
             )
 
-        layers = []
         use_dcn = (dcn_layers >= blocks)
-        layers.append(block(self.inplanes, planes, stride, downsample, self.norm_layer, self.dilation, use_dcn=use_dcn))
+        layers = [
+            block(
+                self.inplanes,
+                planes,
+                stride,
+                downsample,
+                self.norm_layer,
+                self.dilation,
+                use_dcn=use_dcn,
+            )
+        ]
+
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
             use_dcn = ((i+dcn_layers) >= blocks) and (i % dcn_interval == 0)
@@ -170,10 +180,10 @@ class ResNetBackboneGN(ResNetBackbone):
         with open(path, 'rb') as f:
             state_dict = pickle.load(f, encoding='latin1') # From the detectron source
             state_dict = state_dict['blobs']
-        
+
         our_state_dict_keys = list(self.state_dict().keys())
         new_state_dict = {}
-    
+
         gn_trans     = lambda x: ('gn_s' if x == 'weight' else 'gn_b')
         layeridx2res = lambda x: 'res' + str(int(x)+2)
         block2branch = lambda x: 'branch2' + ('a', 'b', 'c')[int(x[-1:])-1]
@@ -187,7 +197,7 @@ class ResNetBackboneGN(ResNetBackbone):
                 transcribed_key = 'conv1_w'
             elif (parts[0] == 'bn1'):
                 transcribed_key = 'conv1_' + gn_trans(parts[1])
-            elif (parts[0] == 'layers'):
+            elif parts[0] == 'layers':
                 if int(parts[1]) >= self.num_base_layers: continue
 
                 transcribed_key = layeridx2res(parts[1])
@@ -195,21 +205,14 @@ class ResNetBackboneGN(ResNetBackbone):
 
                 if parts[3] == 'downsample':
                     transcribed_key += 'branch1_'
-                    
-                    if parts[4] == '0':
-                        transcribed_key += 'w'
-                    else:
-                        transcribed_key += gn_trans(parts[5])
+
+                    transcribed_key += 'w' if parts[4] == '0' else gn_trans(parts[5])
                 else:
                     transcribed_key += block2branch(parts[3]) + '_'
 
-                    if 'conv' in parts[3]:
-                        transcribed_key += 'w'
-                    else:
-                        transcribed_key += gn_trans(parts[4])
-
+                    transcribed_key += 'w' if 'conv' in parts[3] else gn_trans(parts[4])
             new_state_dict[key] = torch.Tensor(state_dict[transcribed_key])
-        
+
         # strict=False because we may have extra unitialized layers at this point
         self.load_state_dict(new_state_dict, strict=False)
 
@@ -282,12 +285,16 @@ class DarkNetBackbone(nn.Module):
     
     def _make_layer(self, block, channels, num_blocks, stride=2):
         """ Here one layer means a string of n blocks. """
-        layer_list = []
+        layer_list = [
+            darknetconvlayer(
+                self.in_channels,
+                channels * block.expansion,
+                kernel_size=3,
+                padding=1,
+                stride=stride,
+            )
+        ]
 
-        # The downsample layer
-        layer_list.append(
-            darknetconvlayer(self.in_channels, channels * block.expansion,
-                             kernel_size=3, padding=1, stride=stride))
 
         # Each block inputs channels and outputs channels * expansion
         self.in_channels = channels * block.expansion
@@ -334,7 +341,7 @@ class VGGBackbone(nn.Module):
 
     def __init__(self, cfg, extra_args=[], norm_layers=[]):
         super().__init__()
-        
+
         self.channels = []
         self.layers = nn.ModuleList()
         self.in_channels = 3
@@ -346,7 +353,7 @@ class VGGBackbone(nn.Module):
         self.total_layer_count = 0
         self.state_dict_lookup = {}
 
-        for idx, layer_cfg in enumerate(cfg):
+        for layer_cfg in cfg:
             self._make_layer(layer_cfg)
 
         self.norms = nn.ModuleList([nn.BatchNorm2d(self.channels[l]) for l in norm_layers])

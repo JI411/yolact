@@ -42,7 +42,7 @@ colors = list(XKCD_COLORS.values())
 
 for idx, bar in enumerate(bars):
 	# Mmm pseudorandom colors
-	char_sum = sum([ord(char) for char in class_names[idx]])
+	char_sum = sum(ord(char) for char in class_names[idx])
 	bar.set_color(colors[char_sum % len(colors)])
 
 plt.xticks(rotation='vertical')

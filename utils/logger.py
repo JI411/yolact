@@ -38,7 +38,7 @@ class Log:
             print('Warning: Log created with log_gpu_stats=True, but nvidia-smi ' \
                   'was not found. Setting log_gpu_stats to False.')
             log_gpu_stats = False
-        
+
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
         self.log_path = os.path.join(log_dir, log_name + '.log')
@@ -51,10 +51,7 @@ class Log:
             with open(self.log_path, 'r') as f:
                 for last in f: pass
 
-                if len(last) > 1:
-                    self.session = json.loads(last)['session'] + 1
-                else:
-                    self.session = 0
+                self.session = json.loads(last)['session'] + 1 if len(last) > 1 else 0
         else:
             self.session = 0
 
@@ -64,7 +61,7 @@ class Log:
 
         if self.log_gpu_stats:
             self.visible_gpus = visible_gpus()
-    
+
 
         self._log_session_header(session_data)
 
@@ -74,18 +71,13 @@ class Log:
         Log information that does not change between iterations here.
         This is to cut down on the file size so you're not outputing this every iteration.
         """
-        info = {}
-        info['type'] = 'session'
-        info['session'] = self.session
-
-        info['data'] = session_data
-
+        info = {'type': 'session', 'session': self.session, 'data': session_data}
         if self.log_gpu_stats:
             keys = ['idx', 'name', 'uuid', 'pwr_cap', 'mem_total']
 
             gpus = gpu_info()
             info['gpus'] = [{k: gpus[i][k] for k in keys} for i in self.visible_gpus]
-        
+
         if self.log_time:
             info['time'] = time.time()
 
@@ -103,24 +95,21 @@ class Log:
         You can either pass data points as kwdargs, or as a dictionary (or both!).
         Values should be json-serializable.
         """
-        info = {}
-        
-        info['type'] = type
-        info['session'] = self.session
+        info = {'type': type, 'session': self.session}
 
         kwdargs.update(data)
         info['data'] = kwdargs
 
         if self.log_gpu_stats:
             keys = ['fan_spd', 'temp', 'pwr_used', 'mem_used', 'util']
-            
+
             gpus = gpu_info()
             info['gpus'] = [{k: gpus[i][k] for k in keys} for i in self.visible_gpus]
-        
+
         if self.log_time:
             info['time'] = time.time()
-            
-        
+
+
         out = json.dumps(info) + '\n'
 
         with open(self.log_path, 'a') as f:
@@ -139,10 +128,7 @@ class LogEntry():
 
         res = self.__dict__['_'][name]
 
-        if type(res) == dict or type(res) == list:
-            return LogEntry(res)
-        else:
-            return res
+        return LogEntry(res) if type(res) in [dict, list] else res
     
     def __getitem__(self, name):
         return self.__getattr__(name)
@@ -173,17 +159,13 @@ class LogVisualizer():
     
     def _decode(self, query:str) -> list:
         path, select = (query.split(';') + [''])[:2]
-        
+
         if select.strip() == '':
             select = lambda x, s: True
         else:
             select = eval('lambda x, s: ' + select)
 
-        if path.strip() == '':
-            path = lambda x, s: x
-        else:
-            path = eval('lambda x, s: ' + path)
-        
+        path = (lambda x, s: x) if path.strip() == '' else eval('lambda x, s: ' + path)
         return path, select
 
     def _follow(self, entry:LogEntry, query:list):
@@ -193,10 +175,7 @@ class LogVisualizer():
             if select(entry, entry._s):
                 res = path(entry, entry._s)
 
-                if type(res) == LogEntry:
-                    return res.__dict__['_']
-                else:
-                    return res
+                return res.__dict__['_'] if type(res) == LogEntry else res
             else:
                 return None
         except (KeyError, IndexError):
@@ -379,7 +358,7 @@ class LogVisualizer():
 
         data_points = []
 
-        for idx, (log, name) in enumerate(zip(self.logs, self.log_names)):
+        for log, name in zip(self.logs, self.log_names):
             log = log[entry_type]
 
             candidates = []
@@ -390,12 +369,12 @@ class LogVisualizer():
                 if type(test) == dict:
                     candidates.append(test)
                 elif type(test) == list:
-                    candidates.append({idx: v for idx, v in enumerate(test)})
-            
-            if len(candidates) > 0:
+                    candidates.append(dict(enumerate(test)))
+
+            if candidates:
                 data_points.append((name, candidates[x_idx]))
-        
-        if len(data_points) == 0:
+
+        if not data_points:
             print('Warning: Nothing to show in bar chart!')
             return
 
@@ -410,10 +389,10 @@ class LogVisualizer():
             for datum in data_points:
                 for k in datum:
                     data_labels.add(k)
-                
+
             data_labels = list(data_labels)
             data_labels.sort()
-        
+
 
         data_values = [[(datum[k] if k in datum else None) for k in data_labels] for datum in data_points]
 
@@ -431,20 +410,20 @@ class LogVisualizer():
         # Plot the graph now
         num_bars = len(series_labels)
         bar_width = 1 / (num_bars + 1)
-        
+
         # Set position of bar on X axis
         positions = [np.arange(len(data_labels))]
         for _ in range(1, num_bars):
             positions.append([x + bar_width for x in positions[-1]])
-        
+
         # Make the plot
         for idx, (series, data, pos) in enumerate(zip(series_labels, data_values, positions)):
             plt.bar(pos, data, color=self._color(idx), width=bar_width, edgecolor='white', label=series)
-        
+
         # Add xticks on the middle of the group bars
         plt.title(x.replace('x.', entry_type + '.') + (' diff' if diff else ''))
         plt.xticks([r + bar_width for r in range(len(data_labels))], data_labels)
-        
+
         # Create legend & Show graphic
         plt.legend()
         plt.show()

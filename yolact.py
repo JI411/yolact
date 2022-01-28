@@ -113,10 +113,10 @@ class PredictionModule(nn.Module):
                     return lambda x: x
                 else:
                     # Looks more complicated than it is. This just creates an array of num_layers alternating conv-relu
-                    return nn.Sequential(*sum([[
+                    return nn.Sequential(*sum(([
                         nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
                         nn.ReLU(inplace=True)
-                    ] for _ in range(num_layers)], []))
+                    ] for _ in range(num_layers)), []))
 
             self.bbox_extra, self.conf_extra, self.mask_extra = [make_extra(x) for x in cfg.extra_layers]
             
@@ -316,11 +316,8 @@ class FPN(ScriptModuleWrapper):
             - A list of FPN convouts in the same order as x with extra downsample layers if requested.
         """
 
-        out = []
         x = torch.zeros(1, device=convouts[0].device)
-        for i in range(len(convouts)):
-            out.append(x)
-
+        out = [x for _ in convouts]
         # For backward compatability, the conv layers are stored in reverse but the input and output is
         # given in the correct order. Thus, use j=-i-1 for the input and output and i for the conv layers.
         j = len(convouts)
@@ -330,10 +327,10 @@ class FPN(ScriptModuleWrapper):
             if j < len(convouts) - 1:
                 _, _, h, w = convouts[j].size()
                 x = F.interpolate(x, size=(h, w), mode=self.interpolation_mode, align_corners=False)
-            
+
             x = x + lat_layer(convouts[j])
             out[j] = x
-        
+
         # This janky second loop is here because TorchScript.
         j = len(convouts)
         for pred_layer in self.pred_layers:
@@ -350,7 +347,7 @@ class FPN(ScriptModuleWrapper):
             for downsample_layer in self.downsample_layers:
                 out.append(downsample_layer(out[-1]))
         else:
-            for idx in range(self.num_downsample):
+            for _ in range(self.num_downsample):
                 # Note: this is an untested alternative to out.append(out[-1][:, :, ::2, ::2]). Thanks TorchScript.
                 out.append(nn.functional.max_pool2d(out[-1], 1, stride=2))
 
@@ -370,9 +367,7 @@ class FastMaskIoUNet(ScriptModuleWrapper):
 
     def forward(self, x):
         x = self.maskiou_net(x)
-        maskiou_p = F.max_pool2d(x, kernel_size=x.size()[2:]).squeeze(-1).squeeze(-1)
-
-        return maskiou_p
+        return F.max_pool2d(x, kernel_size=x.size()[2:]).squeeze(-1).squeeze(-1)
 
 
 
@@ -482,11 +477,14 @@ class Yolact(nn.Module):
         for key in list(state_dict.keys()):
             if key.startswith('backbone.layer') and not key.startswith('backbone.layers'):
                 del state_dict[key]
-        
+
             # Also for backward compatibility with v1.0 weights, do this check
-            if key.startswith('fpn.downsample_layers.'):
-                if cfg.fpn is not None and int(key.split('.')[2]) >= cfg.fpn.num_downsample:
-                    del state_dict[key]
+            if (
+                key.startswith('fpn.downsample_layers.')
+                and cfg.fpn is not None
+                and int(key.split('.')[2]) >= cfg.fpn.num_downsample
+            ):
+                del state_dict[key]
         self.load_state_dict(state_dict)
 
     def init_weights(self, backbone_path):
@@ -498,10 +496,7 @@ class Yolact(nn.Module):
         
         # Quick lambda to test if one list contains the other
         def all_in(x, y):
-            for _x in x:
-                if _x not in y:
-                    return False
-            return True
+            return all(_x in y for _x in x)
 
         # Initialize the rest of the conv layers with xavier
         for name, module in self.named_modules():
@@ -566,7 +561,7 @@ class Yolact(nn.Module):
         _, _, img_h, img_w = x.size()
         cfg._tmp_img_h = img_h
         cfg._tmp_img_w = img_w
-        
+
         with timer.env('backbone'):
             outs = self.backbone(x)
 
@@ -580,7 +575,7 @@ class Yolact(nn.Module):
         if cfg.mask_type == mask_type.lincomb and cfg.eval_mask_branch:
             with timer.env('proto'):
                 proto_x = x if self.proto_src is None else outs[self.proto_src]
-                
+
                 if self.num_grids > 0:
                     grids = self.grid.repeat(proto_x.size(0), 1, 1, 1)
                     proto_x = torch.cat([proto_x, grids], dim=1)
@@ -594,12 +589,12 @@ class Yolact(nn.Module):
 
                     if cfg.mask_proto_prototypes_as_features_no_grad:
                         proto_downsampled = proto_out.detach()
-                
+
                 # Move the features last so the multiplication is easy
                 proto_out = proto_out.permute(0, 2, 3, 1).contiguous()
 
                 if cfg.mask_proto_bias:
-                    bias_shape = [x for x in proto_out.size()]
+                    bias_shape = list(proto_out.size())
                     bias_shape[-1] = 1
                     proto_out = torch.cat([proto_out, torch.ones(*bias_shape)], -1)
 
@@ -612,7 +607,7 @@ class Yolact(nn.Module):
 
             if cfg.use_instance_coeff:
                 pred_outs['inst'] = []
-            
+
             for idx, pred_layer in zip(self.selected_layers, self.prediction_layers):
                 pred_x = outs[idx]
 
@@ -626,7 +621,7 @@ class Yolact(nn.Module):
                     pred_layer.parent = [self.prediction_layers[0]]
 
                 p = pred_layer(pred_x)
-                
+
                 for k, v in p.items():
                     pred_outs[k].append(v)
 
@@ -649,29 +644,23 @@ class Yolact(nn.Module):
             if cfg.use_mask_scoring:
                 pred_outs['score'] = torch.sigmoid(pred_outs['score'])
 
-            if cfg.use_focal_loss:
-                if cfg.use_sigmoid_focal_loss:
-                    # Note: even though conf[0] exists, this mode doesn't train it so don't use it
-                    pred_outs['conf'] = torch.sigmoid(pred_outs['conf'])
-                    if cfg.use_mask_scoring:
-                        pred_outs['conf'] *= pred_outs['score']
-                elif cfg.use_objectness_score:
-                    # See focal_loss_sigmoid in multibox_loss.py for details
-                    objectness = torch.sigmoid(pred_outs['conf'][:, :, 0])
-                    pred_outs['conf'][:, :, 1:] = objectness[:, :, None] * F.softmax(pred_outs['conf'][:, :, 1:], -1)
-                    pred_outs['conf'][:, :, 0 ] = 1 - objectness
-                else:
-                    pred_outs['conf'] = F.softmax(pred_outs['conf'], -1)
+            if cfg.use_focal_loss and cfg.use_sigmoid_focal_loss:
+                # Note: even though conf[0] exists, this mode doesn't train it so don't use it
+                pred_outs['conf'] = torch.sigmoid(pred_outs['conf'])
+                if cfg.use_mask_scoring:
+                    pred_outs['conf'] *= pred_outs['score']
+            elif cfg.use_focal_loss and cfg.use_objectness_score:
+                # See focal_loss_sigmoid in multibox_loss.py for details
+                objectness = torch.sigmoid(pred_outs['conf'][:, :, 0])
+                pred_outs['conf'][:, :, 1:] = objectness[:, :, None] * F.softmax(pred_outs['conf'][:, :, 1:], -1)
+                pred_outs['conf'][:, :, 0 ] = 1 - objectness
+            elif cfg.use_focal_loss or not cfg.use_objectness_score:
+                pred_outs['conf'] = F.softmax(pred_outs['conf'], -1)
             else:
+                objectness = torch.sigmoid(pred_outs['conf'][:, :, 0])
 
-                if cfg.use_objectness_score:
-                    objectness = torch.sigmoid(pred_outs['conf'][:, :, 0])
-                    
-                    pred_outs['conf'][:, :, 1:] = (objectness > 0.10)[..., None] \
-                        * F.softmax(pred_outs['conf'][:, :, 1:], dim=-1)
-                    
-                else:
-                    pred_outs['conf'] = F.softmax(pred_outs['conf'], -1)
+                pred_outs['conf'][:, :, 1:] = (objectness > 0.10)[..., None] \
+                    * F.softmax(pred_outs['conf'][:, :, 1:], dim=-1)
 
             return self.detect(pred_outs, self)
 
