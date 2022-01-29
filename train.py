@@ -1,15 +1,8 @@
-from data import *
-from utils.augmentations import SSDAugmentation, BaseTransform
-from utils.functions import MovingAverage, SavePath
-from utils.logger import Log
-from utils import timer
-from layers.modules import MultiBoxLoss
-from yolact import Yolact
+import math
 import os
-import sys
+import random
 import time
-import math, random
-from pathlib import Path
+
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
@@ -23,6 +16,13 @@ import datetime
 
 # Oof
 import eval as eval_script
+from data import *
+from layers.modules import MultiBoxLoss
+from utils import timer
+from utils.augmentations import SSDAugmentation, BaseTransform
+from utils.functions import MovingAverage, SavePath
+from utils.logger import Log
+from yolact import Yolact
 
 
 def str2bool(v):
