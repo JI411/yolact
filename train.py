@@ -274,7 +274,7 @@ def train():
     last_time = time.time()
 
     epoch_size = len(dataset) // args.batch_size
-    num_epochs = math.ceil(cfg.max_iter / epoch_size) if args.epoch is None else args.epoch
+    num_epochs = math.ceil(cfg.max_iter / epoch_size) if args.epochs is None else args.epochs
 
     # Which learning rate adjustment step are we on? lr' = lr * gamma ^ step_index
     step_index = 0
