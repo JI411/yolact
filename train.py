@@ -539,7 +539,7 @@ def compute_validation_map(epoch, iteration, yolact_net, dataset, log: Log = Non
         if log is not None:
             log.log('val', val_info, elapsed=(end - start), epoch=epoch, iter=iteration)
         if wandb is not None:
-            wandb_log = {f'metrics/{k}': v for k, v in val_info.items()}
+            wandb_log = {f"{'/'.join(k.split('.'))}": v for k, v in val_info.items()}
             wandb_log['epoch'] = epoch
             wandb.log(wandb_log)
 
