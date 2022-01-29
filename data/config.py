@@ -132,13 +132,13 @@ dataset_base = Config({
 
 coal_dataset = dataset_base.copy({
     'name': 'Coal fraction detection dataset',
-          
-    'train_images': '/content/few_data',
-    'train_info': '/content/coco_few_data.json',
 
-    'valid_images': '/content/few_data',
-    'valid_info': '/content/coco_few_data.json',
-          
+    'train_images': '/content/few_data_train',
+    'train_info': '/content/coco_few_data_train.json',
+
+    'valid_images': '/content/few_data_val',
+    'valid_info': '/content/coco_few_data_val.json',
+
     'class_names': ('coal',),
 
     'label_map': {1: 1}
