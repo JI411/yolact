@@ -39,6 +39,7 @@ parser = argparse.ArgumentParser(
     description='Yolact Training Script')
 parser.add_argument('--epochs', default=None, type=int,
                     help='The number of epochs')
+parser.add_argument('--entity', default=None, help='W&B: Entity')
 parser.add_argument('--keep_interrupt', action='store_true',
                     help='Save all interrupt weights when --no_interrupt is off')
 parser.add_argument('--batch_size', default=8, type=int,
@@ -195,7 +196,7 @@ def train():
 
     if wandb is not None:
         wandb_run = wandb.init(config=args,
-                               entity='ji411',
+                               entity=args.entity,
                                resume="allow",
                                project='YOLACT',
                                name=None,)
