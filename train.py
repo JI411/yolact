@@ -24,6 +24,12 @@ from utils.functions import MovingAverage, SavePath
 from utils.logger import Log
 from yolact import Yolact
 
+try:
+    import wandb
+except ImportError:
+    wandb = None
+    print("Install Weights & Biases for experiment logging via 'pip install wandb' (recommended)")
+
 
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
@@ -186,6 +192,14 @@ class CustomDataParallel(nn.DataParallel):
 
 
 def train():
+
+    if wandb is not None:
+        wandb_run = wandb.init(config=args,
+                               entity='ji411',
+                               resume="allow",
+                               project='YOLACT',
+                               name=None,)
+
     if not os.path.exists(args.save_folder):
         os.mkdir(args.save_folder)
 
@@ -324,8 +338,13 @@ def train():
                 # Forward Pass + Compute loss at the same time (see CustomDataParallel and NetLoss)
                 losses = net(datum)
 
-                losses = {k: (v).mean() for k, v in losses.items()}  # Mean here because Dataparallel
+                losses = {k: v.mean() for k, v in losses.items()}  # Mean here because Dataparallel
                 loss = sum([losses[k] for k in losses])
+
+                if wandb is not None:
+                    wandb_log = {f'loss/{k}': v for k, v in losses.items()}
+                    wandb_log['epoch'] = epoch
+                    wandb.log(wandb_log)
 
                 # no_inf_mean removes some components from the loss, so make sure to backward through all of it
                 # all_loss = sum([v.mean() for v in losses.values()])
@@ -403,6 +422,7 @@ def train():
         exit()
 
     yolact_net.save_weights(save_path(epoch, iteration))
+    wandb.run.finish() if wandb and wandb.run else None
 
 
 def set_lr(optimizer, new_lr):
@@ -517,6 +537,10 @@ def compute_validation_map(epoch, iteration, yolact_net, dataset, log: Log = Non
 
         if log is not None:
             log.log('val', val_info, elapsed=(end - start), epoch=epoch, iter=iteration)
+        if wandb is not None:
+            wandb_log = {f'metrics/{k}': v for k, v in val_info.items()}
+            wandb_log['epoch'] = epoch
+            wandb.log(wandb_log)
 
         yolact_net.train()
 
