@@ -345,6 +345,27 @@ class Detections:
             'score': float(score)
         })
 
+    def add_polygon_mask(self, image_id: int, category_id: int, segmentation: np.ndarray, score: float):
+        """ The segmentation should be the full mask, the size of the image and with size [h, w]. """
+
+        contours, _ = cv2.findContours(segmentation.astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        polygons = []
+        valid_poly = 0
+        for contour in contours:
+            # Valid polygons have >= 6 coordinates (3 points)
+            if contour.size >= 6:
+                polygons.append(contour.astype(float).flatten().tolist())
+                valid_poly += 1
+        if valid_poly == 0:
+            raise ValueError
+
+        self.mask_data.append({
+            'image_id': int(image_id),
+            'category_id': get_coco_cat(int(category_id)),
+            'segmentation': polygons,
+            'score': float(score)
+        })
+
     def dump(self):
         dump_arguments = [
             (self.bbox_data, args.bbox_det_file),
